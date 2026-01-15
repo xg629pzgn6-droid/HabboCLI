@@ -68,14 +68,23 @@ public class CommandInterpreter {
     private class HelpCommand implements Command {
         @Override
         public void execute(String args) {
-            System.out.println("\nAvailable Commands:");
+            System.out.println("\n╔════════════════════════════════════════╗");
+            System.out.println("║        Available Commands              ║");
+            System.out.println("╚════════════════════════════════════════╝");
+            System.out.println();
             System.out.println("  connect <host:port>    - Connect to Habbo server");
-            System.out.println("  disconnect             - Disconnect from server");
-            System.out.println("  login <username> <password> - Login to account");
-            System.out.println("  logout                 - Logout from account");
             System.out.println("  status                 - Show connection status");
+            System.out.println("  login <user> <pass>    - Login with SSO authentication");
+            System.out.println("  logout                 - Logout from account");
+            System.out.println("  disconnect             - Disconnect from server");
             System.out.println("  help                   - Show this help message");
             System.out.println("  exit/quit              - Exit the CLI");
+            System.out.println();
+            System.out.println("Example:");
+            System.out.println("  > connect localhost:30000");
+            System.out.println("  > login xiony mypassword");
+            System.out.println("  > status");
+            System.out.println("  > logout");
             System.out.println();
         }
     }
@@ -110,9 +119,9 @@ public class CommandInterpreter {
             HabboConnection connection = new HabboConnection(host, port);
             if (connection.connect()) {
                 HabboCLI.setConnection(connection);
-                System.out.println("Connected to " + host + ":" + port);
+                System.out.println("✅ Connected to " + host + ":" + port);
             } else {
-                System.out.println("Failed to connect to " + host + ":" + port);
+                System.out.println("❌ Failed to connect to " + host + ":" + port);
             }
         }
     }
@@ -126,9 +135,9 @@ public class CommandInterpreter {
             HabboConnection connection = HabboCLI.getConnection();
             if (connection != null && connection.isConnected()) {
                 connection.disconnect();
-                System.out.println("Disconnected from server");
+                System.out.println("✅ Disconnected from server");
             } else {
-                System.out.println("Not connected to any server");
+                System.out.println("❌ Not connected to any server");
             }
         }
     }
@@ -140,10 +149,18 @@ public class CommandInterpreter {
         @Override
         public void execute(String args) {
             HabboConnection connection = HabboCLI.getConnection();
-            if (connection != null && connection.isConnected()) {
-                System.out.println("Connected to " + connection.getHost() + ":" + connection.getPort());
+            
+            if (connection == null || !connection.isConnected()) {
+                System.out.println("❌ Not connected to any server");
+                return;
+            }
+
+            System.out.println("✅ Connected to " + connection.getHost() + ":" + connection.getPort());
+            
+            if (connection.isAuthenticated()) {
+                System.out.println("🔐 " + connection.getAuthManager().getAuthenticationStatus());
             } else {
-                System.out.println("Not connected to any server");
+                System.out.println("❌ Not authenticated");
             }
         }
     }
@@ -156,7 +173,7 @@ public class CommandInterpreter {
         public void execute(String args) {
             HabboConnection connection = HabboCLI.getConnection();
             if (connection == null || !connection.isConnected()) {
-                System.out.println("Not connected to any server. Use 'connect' first.");
+                System.out.println("❌ Not connected to any server. Use 'connect' first.");
                 return;
             }
 
@@ -169,8 +186,21 @@ public class CommandInterpreter {
             String username = parts[0];
             String password = parts[1];
 
-            System.out.println("Attempting to login as: " + username);
-            System.out.println("(Login functionality needs protocol implementation)");
+            System.out.println("🔐 Attempting to login as: " + username);
+            
+            if (connection.authenticate(username, password)) {
+                System.out.println("✅ Login successful!");
+                System.out.println("📊 " + connection.getAuthManager().getAuthenticationStatus());
+            } else {
+                System.out.println("❌ Login failed!");
+                int remaining = connection.getAuthManager().getRemainingLoginAttempts();
+                if (remaining == 0) {
+                    System.out.println("⛔ Maximum login attempts exceeded. Connection will be closed.");
+                    connection.disconnect();
+                } else {
+                    System.out.println("⚠️  Remaining attempts: " + remaining);
+                }
+            }
         }
     }
 
@@ -180,7 +210,18 @@ public class CommandInterpreter {
     private class LogoutCommand implements Command {
         @Override
         public void execute(String args) {
-            System.out.println("Logged out successfully");
+            HabboConnection connection = HabboCLI.getConnection();
+            
+            if (connection != null && connection.isAuthenticated()) {
+                String username = connection.getAuthManager().getCurrentUsername();
+                if (connection.logout()) {
+                    System.out.println("✅ Logged out successfully from: " + username);
+                } else {
+                    System.out.println("❌ Error during logout");
+                }
+            } else {
+                System.out.println("❌ Not authenticated");
+            }
         }
     }
 }
